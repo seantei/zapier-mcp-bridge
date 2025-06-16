@@ -46,11 +46,11 @@ app.post('/execute', async (req, res) => {
         };
 
         const zapierResponse = await axios.post(ZAPIER_MCP_URL, zapierPayload, {
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${ZAPIER_MCP_TOKEN}`,
-                'Accept': 'application/json'
-            }
+          headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${ZAPIER_MCP_TOKEN}`,
+    'Accept': 'application/json, text/event-stream' // <--- UPDATED LINE
+}
         });
 
         console.log("V3 ZAPIER: Successfully received response from Zapier.");
