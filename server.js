@@ -1,15 +1,12 @@
-// server.js - Version 5 (Modern Parser Fix)
+// server.js - Version 6 (New Zapier URL-based Auth)
 const express = require('express');
 const axios = require('axios');
-// REMOVED: const bodyParser = require('body-parser');
 
 const app = express();
-// UPDATED: Using the modern, built-in Express parser
 app.use(express.json());
 
-// Environment variables from your Vercel project settings
+// We only need the URL now, as the key is embedded in it.
 const ZAPIER_MCP_URL = process.env.ZAPIER_MCP_URL;
-const ZAPIER_MCP_TOKEN = process.env.ZAPIER_MCP_TOKEN;
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -18,33 +15,25 @@ app.get('/health', (req, res) => {
 
 // Main execution endpoint
 app.post('/execute', async (req, res) => {
-    console.log("V5 EXECUTE: Function invoked.");
+    console.log("V6 EXECUTE: Function invoked.");
 
-    // Defensive check #1: Was the body parsed?
     if (!req.body || Object.keys(req.body).length === 0) {
-        const errorMsg = "V5 FATAL: Request body is missing or empty.";
-        console.error(errorMsg);
+        console.error("V6 FATAL: Request body is missing or empty.");
         return res.status(400).json({ success: false, error: "Bad Request: Request body is empty." });
     }
-    console.log("V5 EXECUTE: Request body seems to exist.");
-
-    // Defensive check #2: Are the environment variables loaded?
-    if (!ZAPIER_MCP_URL || !ZAPIER_MCP_TOKEN) {
-        const errorMsg = "V5 FATAL: Missing Zapier environment variables.";
-        console.error(errorMsg);
+    
+    if (!ZAPIER_MCP_URL) {
+        console.error("V6 FATAL: Missing Zapier MCP URL environment variable.");
         return res.status(500).json({ success: false, error: "Server configuration error." });
     }
-    console.log("V5 EXECUTE: Environment variables seem to be loaded.");
 
     const { action, params, webhook_url, request_id } = req.body;
 
-    // Defensive check #3: Does the body have the required fields?
     if (!action || !webhook_url) {
-        const errorMsg = `V5 FATAL: Missing 'action' or 'webhook_url' in request body.`;
-        console.error(errorMsg);
+        console.error(`V6 FATAL: Missing 'action' or 'webhook_url' in request body.`);
         return res.status(400).json({ success: false, error: "Bad Request: Missing required fields in body." });
     }
-    console.log(`V5 EXECUTE: All checks passed. Proceeding with action: ${action}`);
+    console.log(`V6 EXECUTE: All checks passed. Proceeding with action: ${action}`);
 
     try {
         const zapierPayload = {
@@ -54,9 +43,9 @@ app.post('/execute', async (req, res) => {
         };
 
         const zapierResponse = await axios.post(ZAPIER_MCP_URL, zapierPayload, {
+            // The Authorization header is now REMOVED. Auth is in the URL.
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${ZAPIER_MCP_TOKEN}`,
                 'Accept': 'application/json, text/event-stream'
             }
         });
@@ -68,13 +57,13 @@ app.post('/execute', async (req, res) => {
         };
         
         axios.post(webhook_url, webhookPayload).catch(err => {
-            console.error("V5 WEBHOOK ERROR:", err.message);
+            console.error("V6 WEBHOOK ERROR:", err.message);
         });
 
         return res.status(200).json({ success: true, message: 'Processed successfully.' });
 
     } catch (error) {
-        console.error("V5 ZAPIER ERROR:", error.message);
+        console.error("V6 ZAPIER ERROR:", error.message);
         
         const errorDetails = {
             success: false,
@@ -85,7 +74,7 @@ app.post('/execute', async (req, res) => {
         };
         
         axios.post(webhook_url, errorDetails).catch(err => {
-            console.error("V5 WEBHOOK ERROR:", err.message);
+            console.error("V6 WEBHOOK ERROR:", err.message);
         });
 
         return res.status(500).json(errorDetails);
