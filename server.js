@@ -1,4 +1,4 @@
-// server.js - Version 7 (Final Payload Fix)
+// server.js - Version 8 (Bare Minimum Payload)
 const express = require('express');
 const axios = require('axios');
 
@@ -7,39 +7,34 @@ app.use(express.json());
 
 const ZAPIER_MCP_URL = process.env.ZAPIER_MCP_URL;
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'healthy' });
-});
+app.get('/health', (req, res) => res.status(200).json({ status: 'healthy' }));
 
-// Main execution endpoint
 app.post('/execute', async (req, res) => {
-    console.log("V7 EXECUTE: Function invoked.");
+    console.log("V8 EXECUTE: Function invoked.");
 
     if (!req.body || Object.keys(req.body).length === 0) {
-        console.error("V7 FATAL: Request body is missing or empty.");
+        console.error("V8 FATAL: Request body is missing or empty.");
         return res.status(400).json({ success: false, error: "Bad Request: Request body is empty." });
     }
     
     if (!ZAPIER_MCP_URL) {
-        console.error("V7 FATAL: Missing Zapier MCP URL environment variable.");
+        console.error("V8 FATAL: Missing Zapier MCP URL environment variable.");
         return res.status(500).json({ success: false, error: "Server configuration error." });
     }
 
     const { action, params, webhook_url, request_id } = req.body;
 
     if (!action || !webhook_url) {
-        console.error(`V7 FATAL: Missing 'action' or 'webhook_url' in request body.`);
+        console.error(`V8 FATAL: Missing 'action' or 'webhook_url' in request body.`);
         return res.status(400).json({ success: false, error: "Bad Request: Missing required fields in body." });
     }
-    console.log(`V7 EXECUTE: All checks passed. Proceeding with action: ${action}`);
+    console.log(`V8 EXECUTE: All checks passed. Proceeding with action: ${action}`);
 
     try {
         // --- THIS IS THE CRITICAL CHANGE ---
-        // Some servers are very picky and want the 'params' object to be a string.
-        // We will construct a more robust payload to account for this.
+        // Stripping the payload to the absolute bare essentials.
+        // We only send the action and the parameters.
         const zapierPayload = {
-            instructions: `Execute the ${action} action with these parameters: ${JSON.stringify(params)}`,
             action: action,
             params: params || {}
         };
@@ -58,11 +53,11 @@ app.post('/execute', async (req, res) => {
             result: zapierResponse.data
         };
         
-        axios.post(webhook_url, webhookPayload).catch(err => console.error("V7 WEBHOOK ERROR:", err.message));
+        axios.post(webhook_url, webhookPayload).catch(err => console.error("V8 WEBHOOK ERROR:", err.message));
         return res.status(200).json({ success: true, message: 'Processed successfully.' });
 
     } catch (error) {
-        console.error("V7 ZAPIER ERROR:", error.message);
+        console.error("V8 ZAPIER ERROR:", error.message);
         
         const errorDetails = {
             success: false,
@@ -72,7 +67,7 @@ app.post('/execute', async (req, res) => {
             details: error.response ? error.response.data : 'No response data'
         };
         
-        axios.post(webhook_url, errorDetails).catch(err => console.error("V7 WEBHOOK ERROR:", err.message));
+        axios.post(webhook_url, errorDetails).catch(err => console.error("V8 WEBHOOK ERROR:", err.message));
         return res.status(500).json(errorDetails);
     }
 });
