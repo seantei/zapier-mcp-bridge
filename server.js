@@ -1,44 +1,46 @@
-// server.js - Version 10.1.0 (Native Vercel Serverless Function)
+// server.js - Version 11 (Final Payload Structure)
+const express = require('express');
 const axios = require('axios');
 
-// This is the main handler function that Vercel will call.
-// It no longer uses the express framework (req, res, app, etc.).
-module.exports = async (request, response) => {
-    // Vercel automatically parses the body for POST requests. It's directly available.
-    const body = request.body;
-    console.log("V10 EXECUTE: Function invoked. Request body:", JSON.stringify(body, null, 2));
+const app = express();
+app.use(express.json());
 
-    // Health check - if the request is a GET, respond with status.
-    if (request.method === 'GET' && request.url.includes('/health')) {
-        return response.status(200).json({ status: 'healthy', version: '10' });
-    }
+const ZAPIER_MCP_URL = process.env.ZAPIER_MCP_URL;
 
-    // Only allow POST requests for the main logic
-    if (request.method !== 'POST') {
-        return response.status(405).json({ success: false, error: 'Method Not Allowed' });
+app.get('/health', (req, res) => res.status(200).json({ status: 'healthy' }));
+
+app.post('/execute', async (req, res) => {
+    console.log("V11 EXECUTE: Function invoked.");
+
+    if (!req.body || Object.keys(req.body).length === 0) {
+        console.error("V11 FATAL: Request body is missing or empty.");
+        return res.status(400).json({ success: false, error: "Bad Request: Request body is empty." });
     }
     
-    // Check if the body was parsed
-    if (!body || Object.keys(body).length === 0) {
-        console.error("V10 FATAL: Request body is missing or empty.");
-        return response.status(400).json({ success: false, error: "Bad Request: Request body is empty." });
-    }
-
-    const { action, params, webhook_url, request_id } = body;
-    const ZAPIER_MCP_URL = process.env.ZAPIER_MCP_URL;
-
-    // Check for required environment variable and body fields
     if (!ZAPIER_MCP_URL) {
-        console.error("V10 FATAL: Missing Zapier MCP URL environment variable.");
-        return response.status(500).json({ success: false, error: "Server configuration error." });
+        console.error("V11 FATAL: Missing Zapier MCP URL environment variable.");
+        return res.status(500).json({ success: false, error: "Server configuration error." });
     }
+
+    const { action, params, webhook_url, request_id } = req.body;
+
     if (!action || !webhook_url) {
-        console.error(`V10 FATAL: Missing 'action' or 'webhook_url' in request body.`);
-        return response.status(400).json({ success: false, error: "Bad Request: Missing required fields in body." });
+        console.error(`V11 FATAL: Missing 'action' or 'webhook_url' in request body.`);
+        return res.status(400).json({ success: false, error: "Bad Request: Missing required fields in body." });
     }
-    
+    console.log(`V11 EXECUTE: All checks passed. Proceeding with action: ${action}`);
+
     try {
-        const zapierPayload = { action, params: params || {} };
+        // --- THIS IS THE CRITICAL CHANGE ---
+        // We are constructing the payload with the 'instructions' field again,
+        // as some versions of the API require it.
+        const zapierPayload = {
+            instructions: `Execute the action '${action}' with the provided parameters.`,
+            action: action,
+            params: params || {}
+        };
+        // --- END OF CHANGE ---
+
         const zapierResponse = await axios.post(ZAPIER_MCP_URL, zapierPayload, {
             headers: {
                 'Content-Type': 'application/json',
@@ -52,14 +54,12 @@ module.exports = async (request, response) => {
             result: zapierResponse.data
         };
         
-        // Fire-and-forget the webhook call
-        axios.post(webhook_url, webhookPayload).catch(err => console.error("V10 WEBHOOK ERROR:", err.message));
-        
-        // Send the final success response back to Make.com
-        return response.status(200).json({ success: true, message: 'Processed successfully.' });
+        axios.post(webhook_url, webhookPayload).catch(err => console.error("V11 WEBHOOK ERROR:", err.message));
+        return res.status(200).json({ success: true, message: 'Processed successfully.' });
 
     } catch (error) {
-        console.error("V10 ZAPIER ERROR:", error.message);
+        console.error("V11 ZAPIER ERROR:", error.message);
+        
         const errorDetails = {
             success: false,
             request_id: request_id,
@@ -68,10 +68,9 @@ module.exports = async (request, response) => {
             details: error.response ? error.response.data : 'No response data'
         };
         
-        // Fire-and-forget the error webhook call
-        axios.post(webhook_url, errorDetails).catch(err => console.error("V10 WEBHOOK ERROR:", err.message));
-        
-        // Send the final error response back to Make.com
-        return response.status(500).json(errorDetails);
+        axios.post(webhook_url, errorDetails).catch(err => console.error("V11 WEBHOOK ERROR:", err.message));
+        return res.status(500).json(errorDetails);
     }
-};
+});
+
+module.exports = app;
