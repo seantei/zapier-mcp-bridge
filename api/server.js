@@ -1,7 +1,6 @@
-// api/server.js
-const axios = require('axios');
+// api/server.js - Using native fetch instead of axios
 
-// Disable body parsing so we can handle it ourselves
+// Disable body parsing so we control it
 export const config = {
     api: {
         bodyParser: {
@@ -78,27 +77,43 @@ module.exports = async (req, res) => {
         
         const zapierPayload = { action, params: params || {} };
         
-        const zapierResponse = await axios.post(ZAPIER_MCP_URL, zapierPayload, {
+        // Use native fetch instead of axios
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+        
+        const zapierResponse = await fetch(ZAPIER_MCP_URL, {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            timeout: 25000 // 25 second timeout
+            body: JSON.stringify(zapierPayload),
+            signal: controller.signal
         });
-
+        
+        clearTimeout(timeoutId);
+        
+        if (!zapierResponse.ok) {
+            throw new Error(`Zapier MCP returned status ${zapierResponse.status}`);
+        }
+        
+        const zapierData = await zapierResponse.json();
         console.log("Zapier response received:", zapierResponse.status);
 
         const webhookPayload = {
             success: true,
             request_id: request_id || 'no-id',
-            result: zapierResponse.data
+            result: zapierData
         };
         
         // Send to webhook asynchronously
         console.log("Sending webhook to:", webhook_url);
-        axios.post(webhook_url, webhookPayload, { timeout: 10000 })
-            .then(() => console.log("Webhook sent successfully"))
-            .catch(err => console.error("Webhook error:", err.message));
+        fetch(webhook_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(webhookPayload)
+        }).then(() => console.log("Webhook sent successfully"))
+          .catch(err => console.error("Webhook error:", err.message));
             
         return res.status(200).json({ 
             success: true, 
@@ -108,22 +123,20 @@ module.exports = async (req, res) => {
 
     } catch (error) {
         console.error("Zapier MCP Error:", error.message);
-        if (error.response) {
-            console.error("Zapier response status:", error.response.status);
-            console.error("Zapier response data:", error.response.data);
-        }
         
         const errorPayload = {
             success: false,
             request_id: request_id || 'no-id',
-            error: error.message,
-            details: error.response ? error.response.data : null
+            error: error.message
         };
         
         // Send error to webhook
         if (webhook_url) {
-            axios.post(webhook_url, errorPayload, { timeout: 10000 })
-                .catch(err => console.error("Webhook error:", err.message));
+            fetch(webhook_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(errorPayload)
+            }).catch(err => console.error("Webhook error:", err.message));
         }
         
         return res.status(500).json({ 
