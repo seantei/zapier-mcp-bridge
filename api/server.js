@@ -1,19 +1,7 @@
-// api/server.js - Using native fetch instead of axios
-
-// Disable body parsing so we control it
-export const config = {
-    api: {
-        bodyParser: {
-            sizeLimit: '1mb',
-        },
-    },
-};
+// api/server.js - Manual body parsing for Vercel
 
 module.exports = async (req, res) => {
     console.log("EXECUTE: Method:", req.method);
-    console.log("EXECUTE: Headers:", JSON.stringify(req.headers, null, 2));
-    console.log("EXECUTE: Body:", req.body);
-    console.log("EXECUTE: Body type:", typeof req.body);
     
     // Handle CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -32,27 +20,25 @@ module.exports = async (req, res) => {
         return res.status(405).json({ success: false, error: 'Method Not Allowed' });
     }
     
-    // Get the body - it should already be parsed by Vercel
-    let body = req.body;
-    
-    // If body is a string, try to parse it
-    if (typeof body === 'string') {
-        try {
-            body = JSON.parse(body);
-        } catch (e) {
-            console.error("ERROR: Failed to parse body string");
-            return res.status(400).json({ success: false, error: "Invalid JSON in request body" });
+    // Manually read the body
+    let body;
+    try {
+        const buffers = [];
+        for await (const chunk of req) {
+            buffers.push(chunk);
         }
+        const data = Buffer.concat(buffers).toString();
+        console.log("Raw body received:", data);
+        body = JSON.parse(data);
+        console.log("Parsed body:", body);
+    } catch (error) {
+        console.error("Error parsing body:", error);
+        return res.status(400).json({ success: false, error: "Invalid JSON in request body" });
     }
     
-    // Debug logging
-    console.log("EXECUTE: Parsed body:", JSON.stringify(body, null, 2));
-    
-    if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
-        console.error("ERROR: Request body is empty or invalid");
-        console.error("Body value:", body);
-        console.error("Body type:", typeof body);
-        return res.status(400).json({ success: false, error: "Bad Request: Request body is empty or invalid." });
+    if (!body || Object.keys(body).length === 0) {
+        console.error("ERROR: Request body is empty");
+        return res.status(400).json({ success: false, error: "Bad Request: Request body is empty." });
     }
 
     const { action, params, webhook_url, request_id } = body;
@@ -65,21 +51,17 @@ module.exports = async (req, res) => {
     
     if (!action || !webhook_url) {
         console.error("ERROR: Missing required fields");
-        console.error("Received fields:", { action, webhook_url, request_id });
         return res.status(400).json({ success: false, error: "Bad Request: Missing 'action' or 'webhook_url'" });
     }
     
     console.log("Processing request:", { action, request_id });
     
     try {
-        console.log("Calling Zapier MCP with action:", action);
-        console.log("ZAPIER_MCP_URL:", ZAPIER_MCP_URL);
-        
+        console.log("Calling Zapier MCP at:", ZAPIER_MCP_URL);
         const zapierPayload = { action, params: params || {} };
         
-        // Use native fetch instead of axios
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
         
         const zapierResponse = await fetch(ZAPIER_MCP_URL, {
             method: 'POST',
@@ -94,11 +76,13 @@ module.exports = async (req, res) => {
         clearTimeout(timeoutId);
         
         if (!zapierResponse.ok) {
-            throw new Error(`Zapier MCP returned status ${zapierResponse.status}`);
+            const errorText = await zapierResponse.text();
+            console.error("Zapier error response:", errorText);
+            throw new Error(`Zapier MCP returned status ${zapierResponse.status}: ${errorText}`);
         }
         
         const zapierData = await zapierResponse.json();
-        console.log("Zapier response received:", zapierResponse.status);
+        console.log("Zapier response received successfully");
 
         const webhookPayload = {
             success: true,
@@ -122,7 +106,7 @@ module.exports = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Zapier MCP Error:", error.message);
+        console.error("Error:", error.message);
         
         const errorPayload = {
             success: false,
