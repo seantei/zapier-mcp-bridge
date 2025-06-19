@@ -1,8 +1,0 @@
-{
-  "name": "zapier-mcp-bridge",
-  "version": "1.0.0",
-  "description": "Zapier MCP Bridge for Vercel",
-  "dependencies": {
-    "axios": "^1.6.0"
-  }
-}
