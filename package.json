@@ -1,22 +1,8 @@
 {
   "name": "zapier-mcp-bridge",
   "version": "1.0.0",
-  "description": "Bridge service between Make.com and Zapier MCP",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
+  "description": "Zapier MCP Bridge for Vercel",
   "dependencies": {
-    
-    "eventsource": "^2.0.2",
-    "axios": "^1.6.0",
-    "body-parser": "^1.20.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
-  "engines": {
-    "node": ">=14.0.0"
+    "axios": "^1.6.0"
   }
 }
