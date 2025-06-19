@@ -1,13 +1,12 @@
 {
-  "functions": {
-    "server.js": {
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     {
+      "source": "/execute",
+      "destination": "/api/server"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/server.js"
+      "destination": "/api/server"
     }
   ]
 }
