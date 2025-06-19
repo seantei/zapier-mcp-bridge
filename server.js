@@ -1,46 +1,38 @@
-// server.js - Version 11 (Final Payload Structure)
-const express = require('express');
+// server.js - Version 10 (Native Vercel Serverless Function)
 const axios = require('axios');
 
-const app = express();
-app.use(express.json());
+// This is the main handler function that Vercel will call.
+module.exports = async (request, response) => {
+    const body = request.body;
+    console.log("V10 EXECUTE: Function invoked. Request body:", JSON.stringify(body, null, 2));
 
-const ZAPIER_MCP_URL = process.env.ZAPIER_MCP_URL;
+    if (request.method === 'GET' && request.url.includes('/health')) {
+        return response.status(200).json({ status: 'healthy', version: '10' });
+    }
 
-app.get('/health', (req, res) => res.status(200).json({ status: 'healthy' }));
-
-app.post('/execute', async (req, res) => {
-    console.log("V11 EXECUTE: Function invoked.");
-
-    if (!req.body || Object.keys(req.body).length === 0) {
-        console.error("V11 FATAL: Request body is missing or empty.");
-        return res.status(400).json({ success: false, error: "Bad Request: Request body is empty." });
+    if (request.method !== 'POST') {
+        return response.status(405).json({ success: false, error: 'Method Not Allowed' });
     }
     
+    if (!body || Object.keys(body).length === 0) {
+        console.error("V10 FATAL: Request body is missing or empty.");
+        return response.status(400).json({ success: false, error: "Bad Request: Request body is empty." });
+    }
+
+    const { action, params, webhook_url, request_id } = body;
+    const ZAPIER_MCP_URL = process.env.ZAPIER_MCP_URL;
+
     if (!ZAPIER_MCP_URL) {
-        console.error("V11 FATAL: Missing Zapier MCP URL environment variable.");
-        return res.status(500).json({ success: false, error: "Server configuration error." });
+        console.error("V10 FATAL: Missing Zapier MCP URL environment variable.");
+        return response.status(500).json({ success: false, error: "Server configuration error." });
     }
-
-    const { action, params, webhook_url, request_id } = req.body;
-
     if (!action || !webhook_url) {
-        console.error(`V11 FATAL: Missing 'action' or 'webhook_url' in request body.`);
-        return res.status(400).json({ success: false, error: "Bad Request: Missing required fields in body." });
+        console.error(`V10 FATAL: Missing 'action' or 'webhook_url' in request body.`);
+        return response.status(400).json({ success: false, error: "Bad Request: Missing required fields in body." });
     }
-    console.log(`V11 EXECUTE: All checks passed. Proceeding with action: ${action}`);
-
+    
     try {
-        // --- THIS IS THE CRITICAL CHANGE ---
-        // We are constructing the payload with the 'instructions' field again,
-        // as some versions of the API require it.
-        const zapierPayload = {
-            instructions: `Execute the action '${action}' with the provided parameters.`,
-            action: action,
-            params: params || {}
-        };
-        // --- END OF CHANGE ---
-
+        const zapierPayload = { action, params: params || {} };
         const zapierResponse = await axios.post(ZAPIER_MCP_URL, zapierPayload, {
             headers: {
                 'Content-Type': 'application/json',
@@ -54,12 +46,11 @@ app.post('/execute', async (req, res) => {
             result: zapierResponse.data
         };
         
-        axios.post(webhook_url, webhookPayload).catch(err => console.error("V11 WEBHOOK ERROR:", err.message));
-        return res.status(200).json({ success: true, message: 'Processed successfully.' });
+        axios.post(webhook_url, webhookPayload).catch(err => console.error("V10 WEBHOOK ERROR:", err.message));
+        return response.status(200).json({ success: true, message: 'Processed successfully.' });
 
     } catch (error) {
-        console.error("V11 ZAPIER ERROR:", error.message);
-        
+        console.error("V10 ZAPIER ERROR:", error.message);
         const errorDetails = {
             success: false,
             request_id: request_id,
@@ -68,9 +59,7 @@ app.post('/execute', async (req, res) => {
             details: error.response ? error.response.data : 'No response data'
         };
         
-        axios.post(webhook_url, errorDetails).catch(err => console.error("V11 WEBHOOK ERROR:", err.message));
-        return res.status(500).json(errorDetails);
+        axios.post(webhook_url, errorDetails).catch(err => console.error("V10 WEBHOOK ERROR:", err.message));
+        return response.status(500).json(errorDetails);
     }
-});
-
-module.exports = app;
+};
