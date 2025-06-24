@@ -44,12 +44,16 @@ module.exports = async (req, res) => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-        const zapierResp = await fetch(ZAPIER_MCP_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(zapierPayload),
-            signal: controller.signal
-        });
+      const zapierResp = await fetch(ZAPIER_MCP_URL, {
+    method: 'POST',
+    headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream'
+    },
+    body: JSON.stringify(zapierPayload),
+    signal: controller.signal
+});
+
         clearTimeout(timeoutId);
 
         if (!zapierResp.ok) {
